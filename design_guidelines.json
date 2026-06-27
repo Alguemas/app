@@ -1,0 +1,96 @@
+{
+  "theme": "dark",
+  "archetype": "2 (Performance Pro) & 7 (Electric Neon)",
+  "brand": {
+    "name": "SimBet",
+    "mission": "Simulate the dopamine hit of gambling while providing a safe, consequence-free environment to help addicts recover, featuring realistic betting UI and subtle awareness interventions.",
+    "emotional_tone": "High-energy surface (urgent, high-stakes) with a supportive, calm underlayer (awareness messages)."
+  },
+  "colors": {
+    "primary": "#22C55E",
+    "primary_hover": "#16A34A",
+    "background": "#061A12",
+    "surface": "#0F291E",
+    "surface_glass": "rgba(15, 41, 30, 0.7)",
+    "accent_red": "#EF4444",
+    "accent_yellow": "#F59E0B",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#9CA3AF",
+    "text_muted": "#6B7280",
+    "awareness_bg": "#1E3A8A",
+    "awareness_text": "#BFDBFE"
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Outfit, sans-serif",
+      "weight": "800",
+      "tracking": "tracking-tighter",
+      "text_transform": "uppercase"
+    },
+    "odds_numbers": {
+      "font_family": "Teko, sans-serif",
+      "weight": "600",
+      "tracking": "tracking-normal"
+    },
+    "body": {
+      "font_family": "IBM Plex Sans, sans-serif",
+      "weight": "400",
+      "leading": "leading-relaxed"
+    }
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Dense and compact. Use p-2 to p-4 for odds grids (Control Room Grid). Generous spacing (p-6) only for awareness popups and fake deposit screen.",
+    "grid_system": "Control Room Grid (tight gaps gap-2 or gap-4). Odds should be displayed in a dense bento or table format.",
+    "navigation": "Sticky Bottom Tab Bar for Mobile (Home, Sports, Casino, Profile) and Sticky Top Nav with User Balance."
+  },
+  "components": {
+    "buttons": {
+      "primary": "Neon green background (#22C55E), pure white text, uppercase, font-bold, no border radius (sharp edges) or very subtle rounded-sm.",
+      "odds_box": "Dark surface (#0F291E), pure white text, neon green border on active/selected state, text-center, compact padding."
+    },
+    "cards": {
+      "match_card": "Solid dark background, 1px border (#1F3D2D), no shadow. Dense layout containing teams, time, and 1X2 odds.",
+      "awareness_toast": "Soft glassmorphism, blue/calm tint, rounded-xl, drop-shadow-2xl, absolute positioned."
+    },
+    "fake_deposit": {
+      "description": "Must look exactly like a real credit card input form. Use Shadcn Form/Input. NO DATA SHOULD BE SAVED OR SENT TO ANY BACKEND. Add a fake loading spinner, then a 'Success' checkmark, and update virtual balance."
+    }
+  },
+  "animations": {
+    "odds_change": "Flash green for odds up, red for odds down. Use CSS transitions.",
+    "crash_game": "Multiplier counting up with a curved line graph (recharts). Must randomly 'CRASH' (red text) to simulate Aviator.",
+    "awareness_popup": "Framer motion slide up from bottom with gentle bounce. Stay on screen longer than typical toasts."
+  },
+  "images": {
+    "sports_banner": [
+      {
+        "url": "https://images.unsplash.com/photo-1762013315117-1c8005ad2b41?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxzb2NjZXIlMjBtYXRjaCUyMG5pZ2h0JTIwc3RhZGl1bXxlbnwwfHx8fDE3ODI1NzYyOTJ8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Soccer match in a packed stadium at night.",
+        "category": "hero_banner"
+      }
+    ],
+    "casino_banner": [
+      {
+        "url": "https://images.pexels.com/photos/31379653/pexels-photo-31379653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Row of illuminated slot machines",
+        "category": "casino_thumbnail"
+      }
+    ],
+    "crash_game_bg": [
+      {
+        "url": "https://images.pexels.com/photos/586041/pexels-photo-586041.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Rocket launch creating a vivid trail",
+        "category": "crash_game_background"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build a Hybrid Mobile-Web App interface with a Bottom Tab Bar and Top Header showing Virtual Coins (Start balance: 200).",
+    "Implement Google Social Login (mocked or real Firebase/AuthJs depending on stack) but keep user data minimal.",
+    "CRITICAL: The Fake Deposit interface must LOOK real (CC inputs, PIX options) but intercept the submit, show a fake success loader, update the virtual balance, and NEVER send CC data anywhere.",
+    "Implement 3 Game views: 1. Sports Betting (fake matches, hardcoded odds), 2. Crash/Aviator (canvas or recharts multiplier), 3. Slots Casino.",
+    "Implement Interstitial Ads and Banners. Use Google AdMob aesthetic or just placeholder DIVs marked as 'AdSpace' (Top, Bottom, and Popups after wins).",
+    "AWARENESS LAYER: Intercept the user journey periodically. If they lose or play for a long time, show a toast or modal: 'O vício em apostas tem tratamento. Ligue 188 (CVV).' with calming colors (blue/white), contrasting the dark neon betting UI.",
+    "Use data-testid on ALL interactive elements (buttons, inputs, tabs)."
+  ]
+}
