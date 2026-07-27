@@ -1,20 +1,42 @@
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { LogBox } from "react-native";
+import { LogBox, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
+import { AuthProvider, useAuth } from "@/src/contexts/auth-context";
 
-
-// Disable logbox errors etc so that users can see the app
-// and agent works as expected.
-LogBox.ignoreAllLogs(true)
-
-// Keep the native splash visible from cold start until icon fonts register.
-// Required because @expo/vector-icons' componentDidMount fallback fires
-// Font.loadAsync against a broken vendor path if any <Icon> mounts before
-// the family is registered — which throws on Android Expo Go.
+LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
+
+function RootNavigator() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    const inAuth = segments[0] === "(tabs)" || segments[0] === "deposit" || segments[0] === "crash" || segments[0] === "slots" || segments[0] === "help";
+    if (user && !inAuth) {
+      router.replace("/(tabs)");
+    } else if (!user && inAuth) {
+      router.replace("/");
+    }
+  }, [user, loading, segments]);
+
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#061A12" } }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="deposit" options={{ presentation: "modal" }} />
+      <Stack.Screen name="crash" />
+      <Stack.Screen name="slots" />
+      <Stack.Screen name="help" />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
@@ -25,9 +47,16 @@ export default function RootLayout() {
     }
   }, [loaded, error]);
 
-  // If the CDN is unreachable we fall through on error rather than wedging
-  // the app — icons will tofu, but the app still boots.
   if (!loaded && !error) return null;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <SafeAreaProvider>
+      <View style={{ flex: 1, backgroundColor: "#061A12" }}>
+        <StatusBar style="light" />
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </View>
+    </SafeAreaProvider>
+  );
 }

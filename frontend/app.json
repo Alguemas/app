@@ -1,21 +1,23 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "SimBet",
+    "slug": "simbet",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
-    "userInterfaceStyle": "automatic",
+    "scheme": "simbet",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.simbet.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#061A12"
       },
+      "package": "com.simbet.app",
       "edgeToEdgeEnabled": true
     },
     "web": {
@@ -31,12 +33,20 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#061A12"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "admob": {
+        "androidAppId": "ca-app-pub-9217530735639061~8432409382",
+        "bannerTop": "ca-app-pub-9217530735639061/7477998903",
+        "bannerBottom": "ca-app-pub-9217530735639061/4411449492",
+        "interstitial": "ca-app-pub-9217530735639061/5454892257"
+      }
     }
   }
 }
