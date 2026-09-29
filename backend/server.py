@@ -2,21 +2,28 @@ from fastapi import FastAPI, APIRouter, HTTPException, Header, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 import os
 import logging
 import uuid
-import random
+import bcrypt
+import jwt as pyjwt
 from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, Literal
 from datetime import datetime, timezone, timedelta
-import httpx
+
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 INITIAL_BALANCE = 200
-EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+JWT_SECRET = os.environ["JWT_SECRET"]
+JWT_ALG = "HS256"
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 7 dias
+GOOGLE_WEB_CLIENT_ID = os.getenv("GOOGLE_WEB_CLIENT_ID", "").strip()
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -25,10 +32,24 @@ db = client[os.environ['DB_NAME']]
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 
 # ============ MODELS ============
-class SessionRequest(BaseModel):
-    session_id: str
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=128)
+    name: str = Field(min_length=1, max_length=80)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(min_length=20)
 
 
 class UserResponse(BaseModel):
@@ -45,7 +66,6 @@ class AuthResponse(BaseModel):
 
 
 class FakeDepositRequest(BaseModel):
-    # These are accepted to look real but are NEVER persisted.
     card_number: Optional[str] = None
     card_holder: Optional[str] = None
     expiry: Optional[str] = None
@@ -56,8 +76,8 @@ class FakeDepositRequest(BaseModel):
 class BetRequest(BaseModel):
     game: Literal["sports", "crash", "slots"]
     stake: int
-    multiplier: float = 1.0  # client-computed outcome multiplier (0 means lost)
-    label: str = ""  # description like "Flamengo vs Palmeiras - Casa"
+    multiplier: float = 1.0
+    label: str = ""
 
 
 class BetResponse(BaseModel):
@@ -77,101 +97,166 @@ class BalanceResponse(BaseModel):
 
 
 # ============ HELPERS ============
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
+
+def make_jwt(user_id: str) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user_id,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=JWT_EXPIRE_MINUTES)).timestamp()),
+    }
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+
+def decode_jwt(token: str) -> Optional[str]:
+    try:
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        return payload.get("sub")
+    except pyjwt.PyJWTError:
+        return None
+
+
 async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing token")
+        raise HTTPException(status_code=401, detail="Sessão inválida.")
     token = authorization.split(" ", 1)[1]
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    exp = session.get("expires_at")
-    if exp and exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if exp and exp < datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail="Session expired")
-    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    user_id = decode_jwt(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sessão inválida ou expirada.")
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
     return user
 
 
-# ============ AUTH ============
-@api_router.post("/auth/session", response_model=AuthResponse)
-async def process_session(req: SessionRequest):
-    """Exchange session_id from Emergent Google Auth redirect for a backend session_token."""
-    async with httpx.AsyncClient(timeout=10.0) as http:
-        try:
-            r = await http.get(
-                EMERGENT_AUTH_URL,
-                headers={"X-Session-ID": req.session_id},
-            )
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"Auth provider error: {e}")
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid session_id")
-    data = r.json()
-    email = data["email"]
-    name = data.get("name", email.split("@")[0])
-    picture = data.get("picture")
-    session_token = data["session_token"]
+def public_user(doc: dict) -> UserResponse:
+    return UserResponse(
+        user_id=doc["user_id"],
+        email=doc["email"],
+        name=doc["name"],
+        picture=doc.get("picture"),
+        virtual_coins=doc.get("virtual_coins", 0),
+    )
 
-    existing = await db.users.find_one({"email": email}, {"_id": 0})
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+# ============ AUTH ============
+@api_router.post("/auth/register", response_model=AuthResponse, status_code=201)
+async def auth_register(req: RegisterRequest):
+    email = normalize_email(str(req.email))
+    now = datetime.now(timezone.utc)
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "user_id": user_id,
+        "email": email,
+        "name": req.name.strip(),
+        "picture": None,
+        "virtual_coins": INITIAL_BALANCE,
+        "password_hash": hash_password(req.password),
+        "auth_provider": "password",
+        "created_at": now,
+    }
+    try:
+        await db.users.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Este e-mail já está cadastrado.")
+    return AuthResponse(user=public_user(doc), session_token=make_jwt(user_id))
+
+
+@api_router.post("/auth/login", response_model=AuthResponse)
+async def auth_login(req: LoginRequest):
+    email = normalize_email(str(req.email))
+    doc = await db.users.find_one({"email": email})
+    if not doc or not doc.get("password_hash") or not verify_password(req.password, doc["password_hash"]):
+        raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
+    return AuthResponse(user=public_user(doc), session_token=make_jwt(doc["user_id"]))
+
+
+@api_router.post("/auth/google", response_model=AuthResponse)
+async def auth_google(req: GoogleLoginRequest):
+    if not GOOGLE_WEB_CLIENT_ID:
+        raise HTTPException(
+            status_code=503,
+            detail="Login com Google não configurado. Defina GOOGLE_WEB_CLIENT_ID no backend.",
+        )
+    try:
+        info = google_id_token.verify_oauth2_token(
+            req.id_token, google_requests.Request(), GOOGLE_WEB_CLIENT_ID
+        )
+        if info.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+            raise ValueError("issuer inválido")
+    except Exception as e:
+        logger.warning("Google token verify failed: %s", e)
+        raise HTTPException(status_code=401, detail="Token do Google inválido ou expirado.")
+
+    sub = info.get("sub")
+    email = info.get("email")
+    if not sub or not email:
+        raise HTTPException(status_code=401, detail="Conta Google incompleta.")
+    email = normalize_email(email)
+    name = info.get("name") or email.split("@")[0]
+    picture = info.get("picture")
+    now = datetime.now(timezone.utc)
+
+    existing = await db.users.find_one({"$or": [{"google_sub": sub}, {"email": email}]})
     if existing:
         user_id = existing["user_id"]
-        virtual_coins = existing.get("virtual_coins", INITIAL_BALANCE)
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {"name": name, "picture": picture}},
+            {"$set": {
+                "google_sub": sub,
+                "name": name,
+                "picture": picture,
+                "updated_at": now,
+            }},
         )
+        existing["name"] = name
+        existing["picture"] = picture
+        doc = existing
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-        virtual_coins = INITIAL_BALANCE
-        await db.users.insert_one({
+        doc = {
             "user_id": user_id,
             "email": email,
             "name": name,
             "picture": picture,
-            "virtual_coins": virtual_coins,
-            "created_at": datetime.now(timezone.utc),
-        })
+            "google_sub": sub,
+            "virtual_coins": INITIAL_BALANCE,
+            "auth_provider": "google",
+            "created_at": now,
+        }
+        try:
+            await db.users.insert_one(doc)
+        except DuplicateKeyError:
+            existing = await db.users.find_one({"email": email})
+            doc = existing
+            user_id = existing["user_id"]
 
-    await db.user_sessions.update_one(
-        {"session_token": session_token},
-        {"$set": {
-            "session_token": session_token,
-            "user_id": user_id,
-            "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
-            "created_at": datetime.now(timezone.utc),
-        }},
-        upsert=True,
-    )
-
-    return AuthResponse(
-        user=UserResponse(
-            user_id=user_id, email=email, name=name, picture=picture,
-            virtual_coins=virtual_coins,
-        ),
-        session_token=session_token,
-    )
+    return AuthResponse(user=public_user(doc), session_token=make_jwt(user_id))
 
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def auth_me(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
-    return UserResponse(
-        user_id=user["user_id"],
-        email=user["email"],
-        name=user["name"],
-        picture=user.get("picture"),
-        virtual_coins=user.get("virtual_coins", 0),
-    )
+    return public_user(user)
 
 
 @api_router.post("/auth/logout")
-async def auth_logout(authorization: Optional[str] = Header(None)):
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ", 1)[1]
-        await db.user_sessions.delete_one({"session_token": token})
+async def auth_logout():
+    # JWT stateless: cliente apaga o token.
     return {"ok": True}
 
 
@@ -184,16 +269,16 @@ async def get_balance(authorization: Optional[str] = Header(None)):
 
 @api_router.post("/user/deposit", response_model=BalanceResponse)
 async def fake_deposit(req: FakeDepositRequest, authorization: Optional[str] = Header(None)):
-    """SIMULATED DEPOSIT - card data is intentionally NEVER stored. Only the balance updates."""
+    """SIMULATED DEPOSIT - card data is intentionally NEVER stored."""
     user = await get_current_user(authorization)
     if req.amount <= 0 or req.amount > 100000:
-        raise HTTPException(status_code=400, detail="Invalid amount")
+        raise HTTPException(status_code=400, detail="Valor inválido.")
     new_balance = user.get("virtual_coins", 0) + req.amount
     await db.users.update_one(
         {"user_id": user["user_id"]},
         {"$set": {"virtual_coins": new_balance}},
     )
-    # IMPORTANT: card_number, card_holder, expiry, cvv are intentionally DISCARDED.
+    # card_number, card_holder, expiry, cvv são intencionalmente DESCARTADOS.
     return BalanceResponse(virtual_coins=new_balance)
 
 
@@ -203,9 +288,9 @@ async def place_bet(req: BetRequest, authorization: Optional[str] = Header(None)
     user = await get_current_user(authorization)
     balance = user.get("virtual_coins", 0)
     if req.stake <= 0:
-        raise HTTPException(status_code=400, detail="Stake must be positive")
+        raise HTTPException(status_code=400, detail="Aposta deve ser positiva.")
     if req.stake > balance:
-        raise HTTPException(status_code=400, detail="Saldo insuficiente")
+        raise HTTPException(status_code=400, detail="Saldo insuficiente.")
 
     payout = int(req.stake * req.multiplier)
     won = req.multiplier > 0
@@ -229,14 +314,8 @@ async def place_bet(req: BetRequest, authorization: Optional[str] = Header(None)
         {"$set": {"virtual_coins": new_balance}},
     )
     return BetResponse(
-        bet_id=bet_id,
-        game=req.game,
-        stake=req.stake,
-        multiplier=req.multiplier,
-        payout=payout,
-        won=won,
-        new_balance=new_balance,
-        label=req.label,
+        bet_id=bet_id, game=req.game, stake=req.stake, multiplier=req.multiplier,
+        payout=payout, won=won, new_balance=new_balance, label=req.label,
         created_at=now.isoformat(),
     )
 
@@ -259,7 +338,6 @@ async def bets_history(authorization: Optional[str] = Header(None), limit: int =
 # ============ FAKE SPORTS DATA ============
 @api_router.get("/sports/matches")
 async def get_matches():
-    """Hardcoded fake matches with odds."""
     matches = [
         {"id": "m1", "league": "Brasileirão", "home": "Flamengo", "away": "Palmeiras",
          "time": "Hoje 21:30", "odds": {"home": 1.85, "draw": 3.40, "away": 4.10}},
@@ -279,7 +357,7 @@ async def get_matches():
 
 @api_router.get("/")
 async def root():
-    return {"message": "SimBet API", "version": "1.0.0"}
+    return {"message": "SimBet API", "version": "2.0.0"}
 
 
 # ============ STARTUP ============
@@ -287,9 +365,7 @@ async def root():
 async def create_indexes():
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)
-    await db.user_sessions.create_index("session_token", unique=True)
-    await db.user_sessions.create_index("user_id")
-    await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
+    await db.users.create_index("google_sub", unique=True, sparse=True)
     await db.bets.create_index("user_id")
     logger.info("MongoDB indexes ready")
 
@@ -303,12 +379,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 
 @app.on_event("shutdown")

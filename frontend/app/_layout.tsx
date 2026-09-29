@@ -19,9 +19,10 @@ function RootNavigator() {
   useEffect(() => {
     if (loading) return;
     const inAuth = segments[0] === "(tabs)" || segments[0] === "deposit" || segments[0] === "crash" || segments[0] === "slots" || segments[0] === "help" || segments[0] === "stats";
+    const inPublic = segments.length === 0 || segments[0] === "register";
     if (user && !inAuth) {
       router.replace("/(tabs)");
-    } else if (!user && inAuth) {
+    } else if (!user && !inPublic) {
       router.replace("/");
     }
   }, [user, loading, segments]);
@@ -29,6 +30,7 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#061A12" } }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="register" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="deposit" options={{ presentation: "modal" }} />
       <Stack.Screen name="crash" />

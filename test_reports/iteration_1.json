@@ -1,0 +1,36 @@
+{
+  "summary": "Backend regression suite fully rewritten for the new JWT + email/password auth (Emergent OAuth removed). 29/29 tests pass covering register/login/me/logout/google, balance, deposit (card-field discard verified by scanning all Mongo collections), bets (win/lose/insufficient/negative), history ordering + no _id/user_id leaks, sports matches, and MongoDB indexes (email/user_id unique, google_sub sparse-unique, bets.user_id).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is well-structured (~380 lines, single file OK). Password hashed with bcrypt cost 12, JWT HS256 stateless with 7-day exp. Response sanitization via public_user() correctly strips _id and password_hash.",
+    "Email normalized to lowercase before insert/query — case-insensitive login confirmed by test.",
+    "Deposit endpoint intentionally ignores card_number/card_holder/expiry/cvv — verified by full-DB scan across every collection: zero leaks.",
+    "GOOGLE_WEB_CLIENT_ID unset → /api/auth/google returns 503 with clear PT message (correct). When configured, real google-auth library verifies id_token issuer/audience. Looks correct.",
+    "MongoDB indexes created on startup: users.email unique, users.user_id unique, users.google_sub sparse+unique, bets.user_id. Duplicate registration correctly caught via DuplicateKeyError → 409 PT.",
+    "Bets history returns sorted desc by created_at, excludes _id and user_id via projection, serializes datetime to ISO string.",
+    "Minor: /api/auth/logout is a no-op returning {ok:true} (correct for stateless JWT; client discards token). Could add token blocklist later but not needed for MVP."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (rewritten for JWT auth; removed obsolete /api/auth/session and user_sessions TTL tests)"
+  ],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "not tested"},
+  "seed_data_creation": "Test users created via /api/auth/register with prefix TEST_simbet_<uuid8>@example.com and password SenhaSegura123. Autouse session fixture wipes all TEST_* users and TEST_* labelled bets before and after the run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend auth flow is JWT (HS256, 7 days). Endpoints: POST /api/auth/register|login|google|logout, GET /api/auth/me. user_sessions collection is deprecated. Testing user: TEST_simbet_<random>@example.com / SenhaSegura123. Google endpoint returns 503 unless GOOGLE_WEB_CLIENT_ID is set. To test Google end-to-end you'd need a real Google OAuth Web Client ID + a live id_token.",
+  "rca_of_issue": "Not applicable — no bugs found. Initial 3 test failures were assertion mistakes in the new test file (compared against raw TEST_EMAIL instead of its lowercased form). Backend's normalize_email() is correct security behavior; fixed the test to compare against .lower()."
+}

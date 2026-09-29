@@ -39,7 +39,8 @@
       "expo-secure-store",
       "expo-status-bar",
       "expo-web-browser",
-      "@react-native-vector-icons/ionicons"
+      "@react-native-vector-icons/ionicons",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true
