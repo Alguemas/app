@@ -18,7 +18,7 @@ function RootNavigator() {
 
   useEffect(() => {
     if (loading) return;
-    const inAuth = segments[0] === "(tabs)" || segments[0] === "deposit" || segments[0] === "crash" || segments[0] === "slots" || segments[0] === "help";
+    const inAuth = segments[0] === "(tabs)" || segments[0] === "deposit" || segments[0] === "crash" || segments[0] === "slots" || segments[0] === "help" || segments[0] === "stats";
     if (user && !inAuth) {
       router.replace("/(tabs)");
     } else if (!user && inAuth) {
@@ -34,6 +34,7 @@ function RootNavigator() {
       <Stack.Screen name="crash" />
       <Stack.Screen name="slots" />
       <Stack.Screen name="help" />
+      <Stack.Screen name="stats" />
     </Stack>
   );
 }

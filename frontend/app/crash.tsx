@@ -10,6 +10,7 @@ import { AdInterstitial } from "@/src/components/ad-interstitial";
 import { AwarenessModal } from "@/src/components/awareness-modal";
 import { useAuth } from "@/src/contexts/auth-context";
 import { api } from "@/src/api";
+import { bumpPlayCounterAndShouldShowAd } from "@/src/utils/play-counter";
 
 const STAKES = [10, 25, 50, 100];
 
@@ -85,9 +86,12 @@ export default function CrashScreen() {
       });
       setBalance(res.new_balance);
       setHistory((h) => [Number(multiplier.toFixed(2)), ...h].slice(0, 8));
+      const showAd = await bumpPlayCounterAndShouldShowAd();
+      if (showAd) {
+        setAd({ open: true, payout: res.won ? res.payout : 0 });
+      }
       if (res.won) {
         setLossStreak(0);
-        setAd({ open: true, payout: res.payout });
       } else {
         const streak = lossStreak + 1;
         setLossStreak(streak);

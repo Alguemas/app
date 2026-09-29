@@ -8,6 +8,7 @@ import { AdInterstitial } from "@/src/components/ad-interstitial";
 import { AwarenessModal } from "@/src/components/awareness-modal";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/contexts/auth-context";
+import { bumpPlayCounterAndShouldShowAd } from "@/src/utils/play-counter";
 
 type Match = {
   id: string;
@@ -90,13 +91,11 @@ export default function SportsTab() {
       setBalance(res.new_balance);
       setSelections({});
       setPlacedCount((c) => c + 1);
-      if (res.won) {
-        setAd({ open: true, payout: res.payout });
-      } else {
-        // Every 3rd loss show awareness
-        if ((placedCount + 1) % 3 === 0) {
-          setAware({ open: true, variant: "loss" });
-        }
+      const showAd = await bumpPlayCounterAndShouldShowAd();
+      if (showAd) {
+        setAd({ open: true, payout: res.won ? res.payout : 0 });
+      } else if (!res.won && (placedCount + 1) % 3 === 0) {
+        setAware({ open: true, variant: "loss" });
       }
     } catch (e: any) {
       console.warn("Bet error", e.message);

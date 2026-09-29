@@ -97,6 +97,24 @@ export default function ProfileTab() {
           <Ionicons name="chevron-forward" size={20} color="#BFDBFE" />
         </TouchableOpacity>
 
+        {/* Full stats CTA */}
+        <TouchableOpacity
+          style={styles.statsCta}
+          onPress={() => router.push("/stats")}
+          testID="profile-stats-cta"
+        >
+          <View style={styles.statsCtaIcon}>
+            <Ionicons name="stats-chart" size={22} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.statsCtaTitle}>Ver estatísticas completas</Text>
+            <Text style={styles.statsCtaText}>
+              Painel com resultados, ganhos e perdas por jogo.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+        </TouchableOpacity>
+
         {/* History */}
         <Text style={styles.sectionTitle}>Histórico de apostas</Text>
         {loading ? (
@@ -192,6 +210,25 @@ const styles = StyleSheet.create({
   },
   awarenessTitle: { color: "#FFF", fontWeight: "800", fontSize: 14 },
   awarenessText: { color: colors.awarenessText, fontSize: 12, marginTop: 2, lineHeight: 16 },
+  statsCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 14,
+    backgroundColor: colors.surface,
+    borderColor: colors.primary,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  statsCtaIcon: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: "rgba(34,197,94,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+  statsCtaTitle: { color: "#FFF", fontWeight: "800", fontSize: 14 },
+  statsCtaText: { color: colors.textSecondary, fontSize: 12, marginTop: 2, lineHeight: 16 },
   sectionTitle: { color: "#FFF", fontSize: 14, fontWeight: "900", letterSpacing: 0.5, paddingHorizontal: 16, marginTop: 22, marginBottom: 8, textTransform: "uppercase" },
   empty: { alignItems: "center", padding: 32, gap: 10 },
   emptyText: { color: colors.textMuted, fontSize: 13 },
