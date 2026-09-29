@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@react-native-vector-icons/ionicons";
 import { colors } from "@/src/theme";
 import { TopHeader } from "@/src/components/top-header";
 import { AdBanner } from "@/src/components/ad-banner";

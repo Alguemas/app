@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "simbet",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.simbet.app"
@@ -17,8 +16,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#061A12"
       },
-      "package": "com.simbet.app",
-      "edgeToEdgeEnabled": true
+      "package": "com.simbet.app"
     },
     "web": {
       "bundler": "metro",
@@ -35,7 +33,13 @@
           "resizeMode": "contain",
           "backgroundColor": "#061A12"
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-secure-store",
+      "expo-status-bar",
+      "expo-web-browser",
+      "@react-native-vector-icons/ionicons"
     ],
     "experiments": {
       "typedRoutes": true

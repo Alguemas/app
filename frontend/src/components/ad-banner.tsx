@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@react-native-vector-icons/ionicons";
 import { colors } from "@/src/theme";
 
 // AdMob unit IDs (real IDs will be used in native builds; Expo Go shows placeholder)
